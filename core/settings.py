@@ -29,7 +29,7 @@ DEBUG = True
 
 ALLOWED_HOSTS = []
 
-#Configuração para não adicionar barra no final da URL
+# Configuração para não adicionar barra no final da URL
 APPEND_SLASH = False
 
 BASE_URL = "http://127.0.0.1:8000"
@@ -44,13 +44,17 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    
-    
+
+
     # Apps
     "accounts",
-    
+    "courses",
+
     # Rest Framework
     'rest_framework',
+
+    # Swagger
+    'drf_yasg',
 ]
 
 MIDDLEWARE = [
@@ -148,8 +152,8 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        ),
-    'DEFAULT_PERMISSION_CLASSES':[
+    ),
+    'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ]
 }
@@ -159,4 +163,14 @@ REST_FRAMEWORK = {
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=7)
 }
-  
+
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',
+            'in': 'header'
+        }
+    },
+    'USE_SESSION_AUTH': False,
+}
