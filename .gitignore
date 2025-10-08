@@ -1,0 +1,41 @@
+# Arquivos do sistema operacional e do editor
+.DS_Store
+Thumbs.db
+ehthumbs.db
+.cache
+.vscode/
+
+# Ambientes virtuais
+venv/
+env/
+.env/
+.venv/
+/lib/
+/include/
+/bin/
+
+# Cache do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Arquivos de mídia e banco de dados
+# O banco de dados do SQLite (se usado)
+db.sqlite3
+/media/
+
+# Static files (se estiverem sendo gerados)
+/static/
+
+# Configurações sensíveis
+*.env
+*.ini
+*.json
+*.yml
+*.yaml
+local_settings.py
+
+# Arquivos de backup
+*.bak
+*.swp
+*~
