@@ -45,6 +45,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
+    # Filters
+    'django_filters',
 
     # Apps
     "accounts",
@@ -55,6 +57,7 @@ INSTALLED_APPS = [
 
     # Swagger
     'drf_yasg',
+
 ]
 
 MIDDLEWARE = [

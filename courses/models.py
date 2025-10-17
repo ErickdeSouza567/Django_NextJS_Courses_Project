@@ -20,7 +20,7 @@ class Course(models.Model):
         related_name='courses',
         on_delete=models.CASCADE
     )
-    level = models.TextField(max_Length=50, choices=[
+    level = models.TextField(max_length=50, choices=[
         ('beginner', 'Iniciante'),
         ('intermediate', 'Intermediário'),
         ('advanced', 'Avançado')

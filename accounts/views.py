@@ -1,4 +1,4 @@
-from rest_framework import APIView
+from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -66,7 +66,6 @@ class SignUpView(APIView):
         acces_token = RefreshToken.for_user(user).access_token
 
         return Response({
-
             "user": UserSerializer(user).data,
             "access_token": str(acces_token)
         })

@@ -6,12 +6,14 @@ from courses.models import Course, Tag, Review, Lesson, Module
 from django.db.models import Avg
 
 
+# Serializer for Tag
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tag
         fields = ['id', 'name']
 
 
+# Serializer for Course Author with additional fields
 class CourseAuthorSerializer(serializers.ModelSerializer):
     average_rating = serializers.SerializerMethodField()
     total_courses = serializers.SerializerMethodField()
@@ -29,6 +31,7 @@ class CourseAuthorSerializer(serializers.ModelSerializer):
         return obj.courses.count()
 
 
+# Serializer for Course
 class CourseSerializer(serializers.ModelSerializer):
     tags = TagSerializer(many=True, read_only=True)
     author = CourseAuthorSerializer(read_only=True)
@@ -42,6 +45,7 @@ class CourseSerializer(serializers.ModelSerializer):
         return obj.enrollments.count()
 
 
+# Serializer for Review
 class ReviewSerializer(serializers.ModelSerializer):
     user = serializers.SlugRelatedField(slug_field="name", read_only=True)
 
@@ -50,6 +54,7 @@ class ReviewSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'rating', 'comment', 'created_at']
 
 
+# Serializers for Module and Lesson
 class LessonSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lesson
@@ -60,6 +65,7 @@ class LessonSerializer(serializers.ModelSerializer):
                   'created_at']
 
 
+# Serializer for Module including nested lessons
 class ModuleSerializer(serializers.ModelSerializer):
     lessons = LessonSerializer(many=True, read_only=True)
 
