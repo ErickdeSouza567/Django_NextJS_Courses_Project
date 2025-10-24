@@ -78,3 +78,17 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
             **serializer.data,
             'enrolled_at': enrolled_at
         })
+
+    @decorators.action(detail=True, methods=['get'])
+    def content(self, request: Request, pk=None):
+        course = self.get_object()
+
+        modules = Module.objects.filter(course=course)
+        total_modules = modules.count()
+
+        lessons = Lesson.objects.filter(module__course=course)
+        total_lessons = lessons.count()
+
+        total_time = lessons.aggregate(
+            total=Sum('time_estimate')
+        )
