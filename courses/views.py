@@ -1,13 +1,13 @@
-from rest_framework import viewsets, decorators
+from rest_framework import viewsets, decorators, views
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.request import Request
-from rest_framework.exceptions import APIException
+from rest_framework.exceptions import APIException, NotFound
 
 from core.utils.exceptions import ValidationError
 from core.utils.formatters import format_serializer_error
 from courses.filters import CourseFilter
-from courses.models import Course, Enrollment
+from courses.models import Course, Enrollment, Lesson, WatchedLesson
 from courses.serializers import CourseSerializer, ReviewSerializer
 
 from django.db.models import Avg, Count, Sum
@@ -121,3 +121,21 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
             'total_time_estimate': total_time,
             'progress': progress,
             'modules': modules_data})
+
+
+class LessonMarkAsWatchedView(views.APIView):
+    def post(self, request: Request, lesson_id: None):
+        try:
+            lesson = Lesson.objects.get(pk=lesson_id)
+        except Lesson.DoesNotExist:
+            raise NotFound('Aula não encontrada.')
+
+        watched, created = WatchedLesson.objects.get_or_create(
+            user=request.user,
+            lesson=lesson
+        )
+
+        if created:
+            return Response({'detail': 'Aula marcada como assistida.'}, status=status.HTTP_201_CREATED)
+        else:
+            return Response({'detail': 'Aula já estava marcada como assistida.'})
