@@ -10,7 +10,7 @@ from courses.filters import CourseFilter
 from courses.models import Course, Enrollment
 from courses.serializers import CourseSerializer, ReviewSerializer
 
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Sum
 
 
 class CourseViewSet(viewsets.ReadOnlyModelViewSet):
@@ -91,4 +91,33 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
 
         total_time = lessons.aggregate(
             total=Sum('time_estimate')
-        )
+        )['total'] or 0
+
+        watched_lessons.count = 0
+        watched_lessons_set = set()
+
+        if request.user.is_authenticated:
+            watched_lessons = WatchedLesson.objects.filter(
+                user=request.user,
+                lessons__in=lessons
+            ).values_list('lesson_id', flat=True)
+
+            watched_lessons_set = set(watched_lessons)
+            watched_lessons_count = len(watched_lessons_set)
+
+        progress = 0
+        if total_lessons > 0:
+            progress = round((watched_lessons_count / total_lessons) * 100, 2)
+
+        modules_data = ModuleSerializer(modules, many=True).data
+
+        for module in modules_data:
+            for lesson in module['lessons']:
+                lesson['is_watched'] = lesson['id'] in watched_lessons_set
+
+        return Response({
+            'total_modules': total_modules,
+            'total_lessons': total_lessons,
+            'total_time_estimate': total_time,
+            'progress': progress,
+            'modules': modules_data})
