@@ -3,12 +3,15 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.request import Request
 from rest_framework.exceptions import APIException, NotFound
+from rest_framework import status
 
 from core.utils.exceptions import ValidationError
 from core.utils.formatters import format_serializer_error
 from courses.filters import CourseFilter
 from courses.models import Course, Enrollment, Lesson, WatchedLesson
 from courses.serializers import CourseSerializer, ReviewSerializer
+from courses.models import Module
+from courses.serializers import ModuleSerializer
 
 from datetime import datetime
 
@@ -22,6 +25,44 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = CourseFilter
     ordering_fields = ['price', 'created_at']
 
+    def _get_course_and_validate_enrollment(self, request: Request):
+        course = self.get_object()
+        user = request.user
+
+        if not Enrollment.objects.filter(user=user, course=course).exists():
+            raise APIException(
+                "Você deve estar matriculado neste curso.")
+
+        return course, user
+
+    def _get_watched_progress(self, user, course, with_total_time=False):
+        lessons = Lesson.objects.filter(
+            module__course=course).values_list('id', flat=True)
+        total_lessons = len(lessons)
+
+        total_time = 0
+        if with_total_time:
+            total_time = lessons.aggregate(
+                total=Sum('time_estimate')
+            )['total'] or 0
+
+        watched_lessons = []
+        total_watched_lessons = 0
+        if user is not None:
+            watched_lessons = WatchedLesson.objects.filter(
+                user=user,
+                lesson_id__in=lessons
+            ).values_list('lesson_id', flat=True)
+            total_watched_lessons = len(watched_lessons)
+
+        return {
+            "lessons": lessons,
+            "total_lessons": total_lessons,
+            "watched_lessons": watched_lessons,
+            "total_time": total_time,
+            "progress": round((total_watched_lessons / total_lessons) * 100, 2) if total_watched_lessons > 0 and total_lessons > 0 else 0
+        }
+
     @decorators.action(detail=True, methods=['get'])
     def reviews(self, request: Request, pk=None):
         course = self.get_object()
@@ -31,12 +72,8 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
 
     @decorators.action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def submit_review(self, request: Request, pk=None):
-        course = self.get_object()
-        user = request.user
 
-        if not Enrollment.objects.filter(user=user, course=course).exists():
-            raise APIException(
-                "Você deve estar matriculado neste curso para enviar uma avaliação.")
+        course, user = self._get_course_and_validate_enrollment(request)
 
         if course.reviews.filter(user=user).exists():
             raise APIException(
@@ -47,7 +84,7 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
                 }
 
         serializer = ReviewSerializer(data=data)
-        if not serializar.is_valid():
+        if not serializer.is_valid():
             raise ValidationError(format_serializer_error(serializer.errors))
 
         serializer.save(user=user, course=course)
@@ -68,7 +105,7 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(instance)
 
         enrolled_at = None
-        if request.user.is_autheticated:
+        if request.user.is_authenticated:
             enrolled = Enrollment.objects.filter(
                 user=request.user,
                 course=instance
@@ -84,74 +121,50 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
     @decorators.action(detail=True, methods=['get'])
     def content(self, request: Request, pk=None):
         course = self.get_object()
+        user = request.user
 
         modules = Module.objects.filter(course=course)
         total_modules = modules.count()
 
-        lessons = Lesson.objects.filter(module__course=course)
-        total_lessons = lessons.count()
-
-        total_time = lessons.aggregate(
-            total=Sum('time_estimate')
-        )['total'] or 0
-
-        watched_lessons.count = 0
-        watched_lessons_set = set()
-
-        if request.user.is_authenticated:
-            watched_lessons = WatchedLesson.objects.filter(
-                user=request.user,
-                lessons__in=lessons
-            ).values_list('lesson_id', flat=True)
-
-            watched_lessons_set = set(watched_lessons)
-            watched_lessons_count = len(watched_lessons_set)
-
-        progress = 0
-        if total_lessons > 0:
-            progress = round((watched_lessons_count / total_lessons) * 100, 2)
+        watched_progress = self._get_watched_progress(
+            user if request.user.is_authenticated else None,
+            course,
+            with_total_time=True
+        )
 
         modules_data = ModuleSerializer(modules, many=True).data
 
         for module in modules_data:
             for lesson in module['lessons']:
-                lesson['is_watched'] = lesson['id'] in watched_lessons_set
+                lesson['is_watched'] = lesson['id'] in watched_progress.get(
+                    'watched_lessons', [])
 
         return Response({
-            'total_modules': total_modules,
-            'total_lessons': total_lessons,
-            'total_time_estimate': total_time,
-            'progress': progress,
+            'total_modules': watched_progress.get('total_modules', total_modules),
+            'total_lessons': watched_progress.get('total_lessons', 0),
+            'total_time_estimate': watched_progress.get('total_time', 0),
+            'progress': watched_progress.get('progress', 0),
             'modules': modules_data})
 
     @decorators.action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
     def certificate(self, request: Request, pk=None):
-        course = self.get_object()
-        user = request.user
 
-        if not Enrollment.objects.filter(user=user, course=course).exists():
-            raise APIException(
-                "Você deve estar matriculado neste curso para enviar uma avaliação.")
+        course, user = self._get_course_and_validate_enrollment(request)
 
-        lessons = Lesson.objects.filter(
-            module__course=course).values_list('id', flat=True)
-        total_lessons = lessons.count()
-        watched_lessons = WatchedLesson.objects.filter(
-            user=user,
-            lesson_id__in=lessons
-        ).count()
+        watched_progress = self._get_watched_progress(
+            user,
+            course,
+            with_total_time=True
+        )
 
-        if total_lessons == 0 or (watched_lessons / total_lessons) < 1:
+        if watched_progress.get('progress') < 100:
             raise APIException(
                 "Você deve completar todas as aulas deste curso para obter o certificado.")
-
-        progress = (watched_lessons / total_lessons) * \
-            100 if total_lessons > 0 else 0
 
         course_data = CourseSerializer(course).data
         certificate_data = {
             'issued_at': datetime.now(),
-            'progress': progress
+            'progress': watched_progress.get('progress')
 
         }
 
@@ -163,7 +176,7 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class LessonMarkAsWatchedView(views.APIView):
-    def post(self, request: Request, lesson_id: None):
+    def post(self, request: Request, lesson_id: int):
         try:
             lesson = Lesson.objects.get(pk=lesson_id)
         except Lesson.DoesNotExist:
