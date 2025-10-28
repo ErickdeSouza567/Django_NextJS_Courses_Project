@@ -10,6 +10,8 @@ from courses.filters import CourseFilter
 from courses.models import Course, Enrollment, Lesson, WatchedLesson
 from courses.serializers import CourseSerializer, ReviewSerializer
 
+from datetime import datetime
+
 from django.db.models import Avg, Count, Sum
 
 
@@ -121,6 +123,43 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
             'total_time_estimate': total_time,
             'progress': progress,
             'modules': modules_data})
+
+    @decorators.action(detail=True, methods=['get'], permission_classes=[IsAuthenticated])
+    def certificate(self, request: Request, pk=None):
+        course = self.get_object()
+        user = request.user
+
+        if not Enrollment.objects.filter(user=user, course=course).exists():
+            raise APIException(
+                "Você deve estar matriculado neste curso para enviar uma avaliação.")
+
+        lessons = Lesson.objects.filter(
+            module__course=course).values_list('id', flat=True)
+        total_lessons = lessons.count()
+        watched_lessons = WatchedLesson.objects.filter(
+            user=user,
+            lesson_id__in=lessons
+        ).count()
+
+        if total_lessons == 0 or (watched_lessons / total_lessons) < 1:
+            raise APIException(
+                "Você deve completar todas as aulas deste curso para obter o certificado.")
+
+        progress = (watched_lessons / total_lessons) * \
+            100 if total_lessons > 0 else 0
+
+        course_data = CourseSerializer(course).data
+        certificate_data = {
+            'issued_at': datetime.now(),
+            'progress': progress
+
+        }
+
+        return Response({
+            "course": course_data,
+            "certificate": certificate_data
+
+        })
 
 
 class LessonMarkAsWatchedView(views.APIView):
