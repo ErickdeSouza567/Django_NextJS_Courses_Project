@@ -8,7 +8,7 @@ from rest_framework import status
 from core.utils.exceptions import ValidationError
 from core.utils.formatters import format_serializer_error
 from courses.filters import CourseFilter
-from courses.models import Course, Enrollment, Lesson, WatchedLesson
+from courses.models import Course, Enrollment, Lesson, Order, WatchedLesson
 from courses.serializers import CourseSerializer, ReviewSerializer
 from courses.models import Module
 from courses.serializers import ModuleSerializer
@@ -16,6 +16,9 @@ from courses.serializers import ModuleSerializer
 from datetime import datetime
 
 from django.db.models import Avg, Count, Sum
+from django.conf import settings
+
+import stripe
 
 
 class CourseViewSet(viewsets.ReadOnlyModelViewSet):
@@ -25,13 +28,21 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = CourseFilter
     ordering_fields = ['price', 'created_at']
 
-    def _get_course_and_validate_enrollment(self, request: Request):
+    def _get_course_and_validate_enrollment(self, request: Request, require_enrollment=True):
         course = self.get_object()
         user = request.user
 
-        if not Enrollment.objects.filter(user=user, course=course).exists():
+        is_enrolled = Enrollment.objects.filter(
+            user=user, course=course).exists()
+
+        if require_enrollment and not is_enrolled:
             raise APIException(
                 "Você deve estar matriculado neste curso.")
+
+        if not require_enrollment and is_enrolled:
+            raise APIException(
+                "Você já está matriculado neste curso."
+            )
 
         return course, user
 
@@ -173,6 +184,54 @@ class CourseViewSet(viewsets.ReadOnlyModelViewSet):
             "certificate": certificate_data
 
         })
+
+    @decorators.action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def enroll(self, request: Request, pk=None):
+        course, user = self._get_course_and_validate_enrollment(
+            request, require_enrollment=False)
+
+        if Order.objects.filter(user=user, course=course, paid=True).exists():
+            raise APIException(
+                "Você já possui um pedido pago para este curso.")
+
+        user.orders.filter(course=course, paid=False).delete()
+
+        order = Order.objects.create(
+            user=user,
+            course=course,
+        )
+        try:
+            checkout_session = stripe.checkout.Session.create(
+                payment_method_types=['card'],
+                mode='payment',
+                line_items=[{
+                    'price_data': {
+                        'currency': 'brl',
+                        'product_data': {
+                            'name': course.title,
+                            'description': course.description,
+                        },
+                        'unit_amount': int(course.price * 100),
+                    },
+                    'quantity': 1,
+                }],
+                customer_email=user.email,
+                metadata={
+                    'user_id': user.id,
+                    'course_id': course.id,
+                    'order_id': order.id,
+                },
+                success_url=f'{settings.BASE_URL}/api/v1/courses/process_checkout?order_id={order.id}',
+                cancel_url=f'{settings.FRONTEND_BASE_URL}/courses/{course.id}?message=cancel_order',
+            )
+
+            order.external_payment_id = checkout_session.id
+            order.save()
+
+        except Exception as e:
+            return Response({'detail': 'Erro ao tentar se inscrever no curso.'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                            )
 
 
 class LessonMarkAsWatchedView(views.APIView):
