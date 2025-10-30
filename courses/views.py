@@ -1,3 +1,4 @@
+from django.shortcuts import redirect
 from rest_framework import viewsets, decorators, views
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -250,3 +251,39 @@ class LessonMarkAsWatchedView(views.APIView):
             return Response({'detail': 'Aula marcada como assistida.'}, status=status.HTTP_201_CREATED)
         else:
             return Response({'detail': 'Aula já estava marcada como assistida.'})
+
+
+class ProccessCheckoutView(views.APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request: Request):
+        order_id = request.GET.get('order_id')
+
+        if not order_id:
+            return redirect(settings.FRONTEND_BASE_URL)
+
+        order = Order.objects.filter(id=order_id).first()
+
+        if not order:
+            return redirect(settings.FRONTEND_BASE_URL)
+
+        error_url = f'{settings.FRONTEND_BASE_URL}/courses/{order.course.id}?message=payment_failed'
+        success_url = f'{settings.FRONTEND_BASE_URL}/courses/{order.course.id}/learn'
+
+        try:
+            session = stripe.checkout.Session.retrieve(
+                order.external_payment_id)
+
+            if session.payment_status != 'paid':
+                return redirect(error_url)
+
+            order.paid = True
+            order.save()
+
+            Enrollment.objects.get_or_create(
+                user=order.user,
+                course=order.course
+            )
+            return redirect(success_url)
+        except Exception as e:
+            return redirect(error_url)
