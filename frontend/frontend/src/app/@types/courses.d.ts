@@ -50,3 +50,35 @@ type CourseReview = {
     comment: string;
     created_at: string;
 }
+
+type APIGetCourseResponse = Course;
+
+type APIGetCoursesResponse = {
+    results: Course[];
+    count: number;
+    next: string | null;
+    previous: string | null;
+}
+
+type APIGetCourseContentResponse = {
+    total_modules: number;
+    total_time: number;
+    total_lessons: number;
+    progress: number;
+    modules: CourseModule[]
+}
+
+type APIGetCourseReviewsResponse = CourseReview[]
+
+type APIGetCourseCertificateResponse = {
+    course: Course;
+    certificate: {
+        progress: number;
+        issued_at: string;
+    }
+}
+
+
+type APIPostCourseEnrollResponse = {
+    checkout_url: string;
+}
