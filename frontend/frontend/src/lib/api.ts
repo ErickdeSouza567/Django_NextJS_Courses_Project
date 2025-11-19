@@ -1,6 +1,7 @@
 "use server";
 
 import axios, { AxiosError } from "axios";
+import { auth } from "@/lib/auth";
 
 type Props = {
     endpoint: string;
@@ -18,9 +19,15 @@ export const api = async <TypeResponse>({
     withAuth = true
 }: Props): Promise<API<TypeResponse>> => {
 
+    const session = await auth()
+
     const instance = axios.create({
         baseURL: BASE_URL
     });
+
+    if (withAuth && session?.user?.access_token) {
+        instance.defaults.headers.common['Authorization'] = `Bearer ${session.user.access_token}`;
+    }
 
     try {
         const response = await instance.request<API<TypeResponse>>({
